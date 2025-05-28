@@ -1885,7 +1885,7 @@ class Vehicle:
         t_span = (0, lim_time)  # Time range
         t_eval = np.linspace(t_span[0], t_span[1], 50)  # Time points to evaluate
         # Solve the ODE
-        solution = solve_ivp(system, t_span, [y0, v0], method='BDF', t_eval=t_eval, args=(k,), rtol = 1e-3, atol=0.0001)
+        solution = solve_ivp(system, t_span, [y0, v0], method='BDF', t_eval=t_eval, args=(k,), rtol = 1e-1, atol=0.1)
         # Extract solution
         t = solution.t
         y = solution.y[0]  # y corresponds to y1
@@ -1915,8 +1915,9 @@ class Vehicle:
             y1 = self.assumed_rack_stroke/c_factor*360
         angle = self.KPA_rotation_angle_vs_rack(y1/360*c_factor)
         opp_angle = self.KPA_rotation_angle_vs_rack(-y1/360*c_factor)
-        friction_r = self.linkage_friction_contribution_on_steering*self.mechanical_advantage_dynamic(angle)
-        friction_l = self.linkage_friction_contribution_on_steering*self.mechanical_advantage_dynamic(opp_angle)
+        steering_wheel_friction = self.linkage_friction_contribution_on_steering + 0.3*y1/360*c_factor/self.assumed_rack_stroke
+        friction_r = steering_wheel_friction*self.mechanical_advantage_dynamic(angle)
+        friction_l = steering_wheel_friction*self.mechanical_advantage_dynamic(opp_angle)
         factor = 1
         if(np.sign(y2)>=0 and t>0):
             factor = 0
