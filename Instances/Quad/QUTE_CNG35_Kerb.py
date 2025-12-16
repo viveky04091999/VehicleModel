@@ -4,11 +4,11 @@ from Instances.Quad.base import QUTE, MRF13570R1269S
 currveh = QUTE()
 currtire = MRF13570R1269S()
 instance = Vehicle(
-    np.array([1054.09, 424.19, 1232.43]),
-    np.array([976.99, 413.12, 1267.05]),
-    np.array([1130.93, 20.67, 1316.84]),
-    np.array([997.96, 571.50, 953.90]),
-    np.array([990.98, 500.68, 917.52]),
+    np.array([1056.9, 424.2, 1223.1]),
+    np.array([1056.9, 424.2, 1223.1]),
+    np.array([1130.4, 20.0, 1316.2]),
+    np.array([999.4, 570.0, 944.8]),
+    np.array([992.4, 500.7, 908.4]),
     r_La = np.array([1322.30, 515.20, 965.00]),
     r_Lb = np.array([1322.30, 262.79, 965.00]),
     r_Ua = np.array([1240.13, 401.44, 1283.81]),
@@ -20,7 +20,8 @@ instance = Vehicle(
     dlr = currveh.dlr,
     initial_camber = currveh.initial_camber,
     toe_in = currveh.toe_in,
-    tw = currveh.tw,
+    twf = currveh.twf,
+    twr = currveh.twr,
     wb = currveh.wb,
     wheel_rate_f = currveh.wr_front,
     wheel_rate_r = currveh.wr_rear,

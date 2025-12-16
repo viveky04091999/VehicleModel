@@ -7,7 +7,8 @@ class QUTE:
         self.dlr = 241
         self.initial_camber = 0.4 # to be checked
         self.toe_in = 0.4 # to be checked
-        self.tw = 1143
+        self.twf = 1143
+        self.twr = 1143
         self.wb = 1925
         self.wr_front = 1.2
         self.wr_rear = 3
@@ -27,7 +28,8 @@ class R129:
         self.dlr = 257
         self.initial_camber = 0
         self.toe_in = 0
-        self.tw = 1100
+        self.twf = 1100
+        self.twr = 1100
         self.wb = 1930
         self.wr_front = 1.2
         self.wr_rear = 2
@@ -39,6 +41,27 @@ class R129:
         self.assumed_rack_stroke = 54
         self.linkage_effort = QUTE().linkage_effort*0.8
         self.I_w = 0.34 # Moment of Inertia of the Parts that rotate about the Kingpin Axis
+        self.I_ss = 0.03 # Moment of Inertia of the Steering Parts that rotate about the Steering Wheel Axis
+
+class Golf:
+    def __init__(self):
+        self.slr = 236
+        self.dlr = 241
+        self.initial_camber = 0 # to be checked
+        self.toe_in = 0 # to be checked
+        self.twf = 1000-100
+        self.twr = 1000-100
+        self.wb = 1650
+        self.wr_front = 1.2
+        self.wr_rear = 1.62
+        self.tire_stiffness_front = 220
+        self.tire_stiffness_rear = 220
+        self.pinion = 5.91
+        self.tirep = 30
+        self.dila = -46
+        self.assumed_rack_stroke = 53
+        self.linkage_effort = 1.7
+        self.I_w = 0.32 # Moment of Inertia of the Parts that rotate about the Kingpin Axis
         self.I_ss = 0.03 # Moment of Inertia of the Steering Parts that rotate about the Steering Wheel Axis
 
 class MRF13570R1269S:

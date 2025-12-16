@@ -1,0 +1,8 @@
+{
+    "python.analysis.extraPaths": [
+        "c:\\Users\\aarora\\.vscode\\extensions\\savvyanalyst.msc-adams-1.2.2\\resources\\adamspy"
+    ],
+    "python.autoComplete.extraPaths": [
+        "c:\\Users\\aarora\\.vscode\\extensions\\savvyanalyst.msc-adams-1.2.2\\resources\\adamspy"
+    ]
+}

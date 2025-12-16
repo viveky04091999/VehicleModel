@@ -29,7 +29,8 @@ class Vehicle:
              dlr: float,
              initial_camber: float,
              toe_in: float,
-             tw: float,
+             twf: float,
+             twr: float,
              wb: float,
              GVW: float,
              b: float,
@@ -61,7 +62,8 @@ class Vehicle:
         # Create static object
         self.mu = mu
         self.g = g
-        self.tw = tw
+        self.twf = twf
+        self.twr = twr
         self.wb = wb
         self.b = b
         self.a = wb - b
@@ -93,7 +95,7 @@ class Vehicle:
         self.dynamic_analysis = 0
         reference = self.reference()
         self.model = self.regression_model()
-        self.rack_stroke = self.rack_vs_road_steer(dila - toe_in)
+        # self.rack_stroke = self.rack_vs_road_steer(dila - toe_in)
         
         self.slipangles = np.zeros((50, 2))
         self.slipangles[0] = np.array([0,0])
@@ -110,7 +112,7 @@ class Vehicle:
         self.tempdynamicsolution = np.zeros(12)
         self.tempdynamictheta = 0
         self.move = 0.01
-        self.trainslipangles()
+        # self.trainslipangles()
         self.linkage_friction_contribution_on_steering = linkage_effort   
     @classmethod
     def create_object(cls, r_A, r_B, r_C, r_O, r_K, tire_radius, initial_camber, toe_in, CG_height, 
@@ -834,6 +836,7 @@ class Vehicle:
         return tempT # np.array([tempO[0], tempT[1], tempT[2]])
     def delta_z(self, curr_KPA_angle):
         reference = self.reference()
+        return 0 
         if curr_KPA_angle == 0:
             return 0
         position_to_add = reference.zeropos+int(np.round(curr_KPA_angle,reference.maxdecimal)*reference.conversionstep)
@@ -1175,19 +1178,19 @@ class Vehicle:
     def ackerman_radius(self, angle):
         return self.wb/np.tan(np.radians(angle))
     def ackerman_radius_from_inner(self, inner_angle):
-        return self.ackerman_radius(inner_angle) + self.tw/2
+        return self.ackerman_radius(inner_angle) + self.twf/2
     # def ackerman_radius_from_outer(self, outer_angle):
-    #     return self.ackerman_radius(self.ackerman(outer_angle)) - self.tw/2
+    #     return self.ackerman_radius(self.ackerman(outer_angle)) - self.twf/2
     def ackerman_ideal_inner(self, inner_angle, ackerman_radius):
         reference = self.reference()
         R = ackerman_radius
         curr_KPA_angle = self.KPA_rotation_angle(-inner_angle)
-        return np.degrees(np.arctan(self.wb/(R - self.tw/2 - Vehicle.magnitude(self.curr_T(curr_KPA_angle)-self.curr_T(0)))))
+        return np.degrees(np.arctan(self.wb/(R - self.twf/2 - Vehicle.magnitude(self.curr_T(curr_KPA_angle)-self.curr_T(0)))))
     def ackerman_ideal_outer(self, outer_angle, ackerman_radius):
         reference = self.reference()
         R = ackerman_radius
         curr_KPA_angle = self.KPA_rotation_angle(outer_angle)
-        return np.degrees(np.arctan(self.wb/(R + self.tw/2 - Vehicle.magnitude(self.curr_T(curr_KPA_angle)-self.curr_T(0)))))
+        return np.degrees(np.arctan(self.wb/(R + self.twf/2 - Vehicle.magnitude(self.curr_T(curr_KPA_angle)-self.curr_T(0)))))
     def ackerman_percentage(self, inner, outer):
         R = self.ackerman_radius_from_inner(inner)
         return (inner - outer)/(inner - self.ackerman_ideal_outer(outer, R))*100
@@ -1199,7 +1202,7 @@ class Vehicle:
     def tcr(self, outer_angle, inner_angle):
         reference = self.reference()
         a = self.a
-        t = self.tw
+        t = self.twf
         theta1 = np.radians(outer_angle)
         theta2 = np.radians(inner_angle)
         OP1 = np.sin(theta2)*t/np.sin(theta2 - theta1)
@@ -1211,22 +1214,22 @@ class Vehicle:
     def ccr(self, outer_angle, inner_angle):
         reference = self.reference()
         a = self.a
-        t = self.tw
+        t = self.twf
         theta1 = np.radians(outer_angle)
         theta2 = np.radians(inner_angle)
         OP1 = np.sin(theta2)*t/np.sin(theta2 - theta1)
         return OP1/1000
     def ideal_ccr_inner(self, inner_angle): # For 100% Ackermann, Inmner Angle
         wb = self.wb
-        tw = self.tw
+        twf = self.twf
         theta = np.radians(inner_angle)
         inner_rear_radus = wb/np.tan(theta)
-        outer_rear_radius = inner_rear_radus + tw
+        outer_rear_radius = inner_rear_radus + twf
         outer_front_radius = np.sqrt(wb**2 + outer_rear_radius**2)
         return outer_front_radius
     def ideal_ccr_outer(self, outer_angle): # For 100% Ackermann, Outer Angle
         wb = self.wb
-        tw = self.tw
+        twf = self.twf
         theta = np.radians(outer_angle)
         outer_rear_radius = wb/np.tan(theta)
         outer_front_radius = np.sqrt(wb**2 + outer_rear_radius**2)
@@ -1309,16 +1312,16 @@ class Vehicle:
         Rl = reference.Kr*zrl
         Rr = reference.Kr*zrr
         
-        t = self.tw
+        tf = self.twf
+        tr = self.twr
         a = self.a
         b = self.b
         W = self.GVW
-        FL = np.array([self.x_L(self.curr_KPA_angle), self.y_L(self.curr_KPA_angle), -self.z_L(self.curr_KPA_angle)-zfl])
-        FR = np.array([self.x_R(self.curr_KPA_angle), self.tw+self.y_R(self.curr_KPA_angle), -self.z_R(self.curr_KPA_angle)-zfr])
+        FL = np.array([self.x_L(self.curr_KPA_angle), tr/2-tf/2+self.y_L(self.curr_KPA_angle), -self.z_L(self.curr_KPA_angle)-zfl])
+        FR = np.array([self.x_R(self.curr_KPA_angle), tr/2+tf/2+self.y_R(self.curr_KPA_angle), -self.z_R(self.curr_KPA_angle)-zfr])
         RL = np.array([self.a+self.b, 0, -zrl])
-        RR = np.array([self.a+self.b, self.tw, -zrr])
-
-        eq1 = Fl*(self.y_L(self.curr_KPA_angle)) + Rr*t +Fr*(t+self.y_R(self.curr_KPA_angle)) - W*t/2
+        RR = np.array([self.a+self.b, tr, -zrr])
+        eq1 = Fl*(tr/2-tf/2+self.y_L(self.curr_KPA_angle)) + Rr*tr +Fr*(tr/2+tf/2+self.y_R(self.curr_KPA_angle)) - W*tr/2
         eq2 = Fl*(a+b-self.x_L(self.curr_KPA_angle)) + Fr*(a+b-self.x_R(self.curr_KPA_angle)) - W*b
         eq3 = Fl + Fr + Rl + Rr - W
         eq4 = np.dot(np.cross(FR - FL,RL - FL), FR - RR)
@@ -1388,11 +1391,12 @@ class Vehicle:
         zrr = Rr/reference.Kr
         a = self.a
         b = self.b
-        t = self.tw
-        FL = np.array([self.x_L(theta), self.y_L(theta), -self.z_L(theta)-zfl])
-        FR = np.array([self.x_R(theta), t+self.y_R(theta), -self.z_R(theta)-zfr])
+        tf = self.twf
+        tr = self.twr
+        FL = np.array([self.x_L(theta), tr/2-tf/2+ self.y_L(theta), -self.z_L(theta)-zfl])
+        FR = np.array([self.x_R(theta), tr/2+tf/2+self.y_R(theta), -self.z_R(theta)-zfr])
         RL = np.array([a+b, 0, -zrl])
-        RR = np.array([a+b, t, -zrr])
+        RR = np.array([a+b, tr, -zrr])
 
         h = reference.CG_height + self.curr_O(theta)[2]-self.curr_T(theta)[2]
         M = self.GVW
@@ -1406,9 +1410,9 @@ class Vehicle:
         theta2 = np.radians(thetaR - alphafR)
         theta1 = np.radians(thetaL - alphafL)
 
-        OP1 = np.sin(theta2)*t/np.sin(theta2 - theta1)
-        OP2 = np.sin(theta1)*t/np.sin(theta2 - theta1)
-        OG = np.sqrt(t**2/4 + OP2**2 + 2*t/2*OP2*np.cos(theta2))
+        OP1 = np.sin(theta2)*tf/np.sin(theta2 - theta1)
+        OP2 = np.sin(theta1)*tf/np.sin(theta2 - theta1)
+        OG = np.sqrt(tf**2/4 + OP2**2 + 2*tf/2*OP2*np.cos(theta2))
         sin_tau = np.sin(theta2)/OG*OP2
         cos_tau = np.sqrt(1-sin_tau**2)
         R = np.sqrt(a**2 + OG**2 - 2*a*OG*sin_tau)
@@ -1457,11 +1461,11 @@ class Vehicle:
         dlr = reference.tire_radius
 
         # eq1 = (CFL+CFR+CRL+CRR)*h - (Fl-Fr+Rl-Rr)*t/2# due to radial force
-        eq1 = Rr*t + Fr*(t+yR)+Fl*yL + (CFL*np.cos(theta1) + CFR*np.cos(theta2)+CRL*np.cos(theta3) + CRR*np.cos(theta4))*(h+dlr) - M*t/2  # Fl*yL + Rr*t + Fr*(t+yR) + (CFL*np.cos(theta1) + CFR*np.cos(theta2)+CRL*np.cos(theta3) + CRR*np.cos(theta4))*h - M*t/2 
+        eq1 = Rr*tr + Fr*(tf/2+tr/2+yR)+Fl*(tr/2-tf/2+yL) + (CFL*np.cos(theta1) + CFR*np.cos(theta2) + CRL*np.cos(theta3) + CRR*np.cos(theta4))*(h + dlr) - M*tr/2  # Fl*yL + Rr*t + Fr*(t+yR) + (CFL*np.cos(theta1) + CFR*np.cos(theta2)+CRL*np.cos(theta3) + CRR*np.cos(theta4))*h - M*t/2 
         eq2 = Fl*(a + b -xL) + Fr*(a +b -xR) + (CRL*np.sin(theta3) + CRR*np.sin(theta4))*(h+dlr) - (M*b + (CFL*np.sin(theta1) + CFR*np.sin(theta2))*(h+dlr)) # Fl*(a + b - xL) + Fr*(a +b - xR) + (CRL*np.sin(theta3) + CRR*np.sin(theta4))*h - (M*b + (CFL*np.sin(theta1) + CFR*np.sin(theta2))*h)
         eq3 = (Fl + Fr + Rl + Rr - M)
         eq4 = np.dot(np.cross(FR - FL,RL - FL), FR - RR)
-        eq5 = CFL*np.cos(theta1)*yL+CFR*np.cos(theta2)*(t+yR) + CFL*np.sin(theta1)*(a+b-xL) + CFR*np.sin(theta2)*(a+b-xR) - (CRR*np.cos(theta4)*t + M/g*V**2/R*1000*np.sin(gamma)*t/2 + M/g*V**2/R*1000*np.cos(gamma)*b) # CFL*np.cos(theta1)*(yL) + CFR*np.cos(theta2)*(t+yR) + CFL*np.sin(theta1)*(a+b-xL) + CFR*np.sin(theta2)*(a+b-xR) - (CRR*np.cos(theta4)*t + M/g*V**2/R*1000*np.sin(gamma)*t/2 + M/g*V**2/R*1000*np.cos(gamma)*b)
+        eq5 = CFL*np.cos(theta1)*(tr/2 - tf/2 + yL)+CFR*np.cos(theta2)*(tf/2+tr/2+yR) + CFL*np.sin(theta1)*(a+b-xL) + CFR*np.sin(theta2)*(a+b-xR) - (CRR*np.cos(theta4)*(tr) + M/g*V**2/R*1000*np.sin(gamma)*tr/2 + M/g*V**2/R*1000*np.cos(gamma)*b) # CFL*np.cos(theta1)*(yL) + CFR*np.cos(theta2)*(t+yR) + CFL*np.sin(theta1)*(a+b-xL) + CFR*np.sin(theta2)*(a+b-xR) - (CRR*np.cos(theta4)*t + M/g*V**2/R*1000*np.sin(gamma)*t/2 + M/g*V**2/R*1000*np.cos(gamma)*b)
         # eq6 = CFL*np.sin(theta1) + CFR*np.sin(theta2) - CRL*np.sin(theta3) - CRR*np.sin(theta4) - M/g*V**2/R*1000*np.sin(gamma)
         # eq4 = CFL*np.cos(theta1) + CFR*np.cos(theta2) + CRL*np.cos(theta3) + CRR*np.cos(theta4) - M/g*V**2/R*1000*np.cos(gamma)
         eq6 = CFL + CFR + CRL + CRR - M/g*V**2/R*1000
@@ -1474,7 +1478,7 @@ class Vehicle:
             a = self.a
             b = self.b
             W = self.GVW
-            t = self.tw
+            t = self.twf
             if(theta<=-1):
                 loc = -int(int(theta))
                 limits = self.slipangles[loc-1]

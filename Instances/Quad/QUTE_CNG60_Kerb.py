@@ -5,7 +5,7 @@ currveh = QUTE()
 currtire = MRF13570R1269S()
 instance = Vehicle(
     np.array([1056.44, 424.19, 1224.59]),
-    np.array([980.09, 413.01, 1257.99]),
+    np.array([982.9, 411.5, 1255.2]),
     np.array([1130.93, 20.67, 1316.84]),
     np.array([999.74, 570.00, 946.28]),
     np.array([992.16, 500.68, 909.91]),
@@ -20,7 +20,8 @@ instance = Vehicle(
     dlr = currveh.dlr,
     initial_camber = currveh.initial_camber,
     toe_in = currveh.toe_in,
-    tw = currveh.tw,
+    twf = currveh.twf,
+    twr= currveh.twr,
     wb = currveh.wb,
     wheel_rate_f = currveh.wr_front,
     wheel_rate_r = currveh.wr_rear,
