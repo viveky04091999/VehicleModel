@@ -4,11 +4,9 @@ from scipy.optimize import fsolve
 from scipy.integrate import solve_ivp
 from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 from scipy import integrate
 from scipy.interpolate import interp1d
-from scipy.misc import derivative
 
 # Class Vehicle with all the functions
 class Vehicle:
@@ -54,6 +52,7 @@ class Vehicle:
              linkage_effort: float = 1.36, # Nm
              I_w: float = 0.34,
              I_ss: float = 0.03,
+             on_ground: bool = False,  # False = lifted (no ground feedback), True = on road (delta_z active)
              tiredata: np.array =  np.array([0.5094636099593582, 0.1120749440478134, 17.8337673155644, 0.4054933824758519, 0.25184969239087557, 5.904032519832173, 0.5968391994177625, 0.309857379732586 ]),
              CF_Loads: np.array = np.array([0, 150, 200, 250, 500]),
              CF_Stiffnessrad: np.array = np.array([0, 20234.57749,	23031.75745, 24629.16378, 24629.16378 + 250*(24629.16378-23031.75745)/50]),
@@ -76,6 +75,7 @@ class Vehicle:
         self.assumed_rack_stroke = assumed_rack_stroke
         self.pinion = pinion
         self.speed = speed*5/18 #m/s
+        self.on_ground = on_ground  # Store whether vehicle is on ground or lifted
         self.static = Vehicle.create_object(r_A, r_B, r_C, r_O, r_K, slr, initial_camber, toe_in, 
                                           CG_height, wheel_rate_f, wheel_rate_r, tire_stiffness_f, tire_stiffness_r,
                                             tirep, r_La, r_Lb, r_strut, r_Ua, r_Ub, tiredata, speed)
@@ -201,12 +201,89 @@ class Vehicle:
 
 
         return obj        
+    
     def reference(self):
         if(self.dynamic_analysis == 0):
             reference = self.static
         else:
             reference = self.dynamic
         return reference
+    
+    def _safe_fsolve(self, func, x0, max_retries=3, memo_key=None, **kwargs):
+        """
+        Wrapper for fsolve with convergence checking, retry logic, and memoization.
+        
+        Args:
+            func: Function to solve
+            x0: Initial guess (can be list/array or callable that returns initial guess)
+            max_retries: Maximum number of retry attempts with different guesses
+            memo_key: Optional key for memoizing successful solutions
+            **kwargs: Additional arguments for fsolve
+            
+        Returns:
+            Solution array
+            
+        Notes:
+            - Checks convergence and warns if solution didn't converge
+            - Retries with perturbed initial guesses if first attempt fails
+            - Uses memoized solutions as better initial guesses when available
+        """
+        import warnings
+        
+        # Check if we have a memoized solution for this key
+        if memo_key is not None:
+            if not hasattr(self, '_fsolve_memo'):
+                self._fsolve_memo = {}
+            
+            # Use memoized solution as initial guess if available
+            if memo_key in self._fsolve_memo:
+                x0 = self._fsolve_memo[memo_key]
+        
+        # Get initial guess (support callable for dynamic guesses)
+        if callable(x0):
+            initial_guess = x0()
+        else:
+            initial_guess = np.array(x0)
+        
+        # Attempt to solve with full output for convergence checking
+        for attempt in range(max_retries):
+            try:
+                # On retry, perturb the initial guess
+                if attempt > 0:
+                    perturbation = np.random.uniform(-0.1, 0.1, size=initial_guess.shape)
+                    current_guess = initial_guess * (1 + perturbation)
+                else:
+                    current_guess = initial_guess
+                
+                # Solve with full output
+                solution, info, ier, msg = fsolve(func, current_guess, full_output=True, **kwargs)
+                
+                # Check convergence status
+                if ier == 1:
+                    # Success! Memoize the solution
+                    if memo_key is not None:
+                        self._fsolve_memo[memo_key] = solution
+                    return solution
+                else:
+                    # Convergence failed but we got a solution - continue to retry
+                    if attempt == max_retries - 1:
+                        # Last attempt - warn and return best solution we have
+                        warnings.warn(
+                            f"fsolve convergence failed after {max_retries} attempts: {msg}. "
+                            f"Returning best solution found.",
+                            RuntimeWarning,
+                            stacklevel=3
+                        )
+                        return solution
+            
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    # Last attempt failed - re-raise
+                    raise
+                # Otherwise continue to next retry
+        
+        # Should never reach here, but return solution anyway
+        return solution
     # --- Calculation of instantaneous axis for suspension travel ---
     def fvsa_equations(self, values):
         """
@@ -305,7 +382,7 @@ class Vehicle:
                 reference.dpfvsa[position_to_add] = self.svsa_ic(curr_KPA_angle) + np.array([0,1,0])
                 return reference.dpfvsa[position_to_add]
             else:
-                la, mu = fsolve(self.fvsa_equations, [0.01, 0.01])
+                la, mu = self._safe_fsolve(self.fvsa_equations, [0.01, 0.01], memo_key=f'fvsa_{curr_KPA_angle:.2f}')
                 a1 = current_A
                 a2 = (reference.r_Ua + reference.r_Ub) / 2
                 b1 = current_K
@@ -314,7 +391,7 @@ class Vehicle:
                 l2 = b1 + mu * (b1 - b2)   
         else:
             # Strut present
-            la, mu = fsolve(self.fvsa_equations, [0.01, 0.01])
+            la, mu = self._safe_fsolve(self.fvsa_equations, [0.01, 0.01], memo_key=f'fvsa_strut_{curr_KPA_angle:.2f}')
             current_A = self.curr_A(curr_KPA_angle)
             current_K = self.curr_K(curr_KPA_angle)
             current_O = self.curr_O(curr_KPA_angle)
@@ -410,7 +487,7 @@ class Vehicle:
             return reference.dpsvsa[position_to_add]
         if reference.r_strut[0] == 0:
             # No strut present            
-            [la, mu] = fsolve(self.svsa_equations, [0.01, 0.01])
+            [la, mu] = self._safe_fsolve(self.svsa_equations, [0.01, 0.01], memo_key=f'svsa_{curr_KPA_angle:.2f}')
             current_A = self.curr_A(self.curr_KPA_angle_for_svsa)
             current_K = self.curr_K(curr_KPA_angle)
             if(np.abs(reference.r_Ua[0] - reference.r_Ub[0])<1 and np.abs(reference.r_Ua[2] - reference.r_Ub[2])<1) :
@@ -429,7 +506,7 @@ class Vehicle:
                 l2 = b1 + mu * (b1 - b2)
         else:
             # Strut present
-            [la, mu] = fsolve(self.svsa_equations, [0.01, 0.01])
+            [la, mu] = self._safe_fsolve(self.svsa_equations, [0.01, 0.01], memo_key=f'svsa_strut_{curr_KPA_angle:.2f}')
             current_A = self.curr_A(self.curr_KPA_angle_for_svsa)
             a1 = current_A
             a2 = a1 + np.cross(reference.r_strut - a1, np.array([0, 1, 0]))
@@ -470,7 +547,7 @@ class Vehicle:
             self.old_O = Vehicle.rotation(reference.dpO[position_to_add-int(np.sign(curr_KPA_angle))].tolist(), self.curr_A(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(),self.curr_K(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(), np.sign(curr_KPA_angle)*reference.step)
             self.old_W = Vehicle.rotation(reference.dpW[position_to_add-int(np.sign(curr_KPA_angle))].tolist(), self.curr_A(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(),self.curr_K(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(), np.sign(curr_KPA_angle)*reference.step)
             
-            [t] = fsolve(self.solveO, [0.01], xtol = 0.001)
+            [t] = self._safe_fsolve(self.solveO, [0.01], memo_key=f'solveO_K_{curr_KPA_angle:.2f}', xtol=0.001)
             reference.dpK[position_to_add] = Vehicle.rotation(reference.dpK[position_to_add - int(np.sign(curr_KPA_angle))].tolist(),
                                                         self.fvsa_ic(curr_KPA_angle - np.sign(curr_KPA_angle) * reference.step).tolist(),
                                                         self.svsa_ic(curr_KPA_angle - np.sign(curr_KPA_angle) * reference.step).tolist(), t)
@@ -529,7 +606,7 @@ class Vehicle:
             self.old_O = Vehicle.rotation(reference.dpO[position_to_add-int(np.sign(curr_KPA_angle))].tolist(), self.curr_A(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(),self.curr_K(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(), np.sign(curr_KPA_angle)*reference.step)
             self.old_W = Vehicle.rotation(reference.dpW[position_to_add-int(np.sign(curr_KPA_angle))].tolist(), self.curr_A(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(),self.curr_K(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(), np.sign(curr_KPA_angle)*reference.step)
             
-            [t] = fsolve(self.solveO, [0.01], xtol = 0.001)
+            [t] = self._safe_fsolve(self.solveO, [0.01], memo_key=f'solveO_A_{curr_KPA_angle:.2f}', xtol=0.001)
             reference.dpA[position_to_add] = Vehicle.rotation(
                 reference.dpA[position_to_add - int(np.sign(curr_KPA_angle))].tolist(),
                 self.fvsa_ic(curr_KPA_angle - np.sign(curr_KPA_angle) * reference.step).tolist(),
@@ -680,7 +757,7 @@ class Vehicle:
                 self.old_O = Vehicle.rotation(reference.dpO[position_to_add-int(np.sign(curr_KPA_angle))].tolist(), self.curr_A(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(),self.curr_K(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(), np.sign(curr_KPA_angle)*reference.step)
                 self.old_W = Vehicle.rotation(reference.dpW[position_to_add-int(np.sign(curr_KPA_angle))].tolist(), self.curr_A(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(),self.curr_K(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(), np.sign(curr_KPA_angle)*reference.step)
                 
-                [t] = fsolve(self.solveO, [0.01], xtol = 0.001)
+                [t] = self._safe_fsolve(self.solveO, [0.01], memo_key=f'solveO_B_{curr_KPA_angle:.2f}', xtol=0.001)
                 reference.dpB[position_to_add] = Vehicle.rotation(
                     self.old_B.tolist(),
                     self.fvsa_ic(curr_KPA_angle - np.sign(curr_KPA_angle) * reference.step).tolist(),
@@ -691,7 +768,7 @@ class Vehicle:
         self.old_O = Vehicle.rotation(reference.dpT[position_to_add].tolist(), self.curr_A(rounded_value).tolist(),self.curr_K(rounded_value).tolist(), shift)
         self.old_W = Vehicle.rotation(reference.dpW[position_to_add].tolist(), self.curr_A(rounded_value).tolist(),self.curr_K(rounded_value).tolist(), shift)
         self.old_B = Vehicle.rotation(reference.dpB[position_to_add].tolist(), self.curr_A(rounded_value).tolist(),self.curr_K(rounded_value).tolist(), shift)
-        [t] = fsolve(self.solveO, [0.01], xtol = 0.001)
+        [t] = self._safe_fsolve(self.solveO, [0.01], memo_key=f'solveO_B2_{curr_KPA_angle:.2f}', xtol=0.001)
         temp = Vehicle.rotation(
             self.old_B.tolist(),
             self.fvsa_ic(rounded_value).tolist(),
@@ -750,7 +827,7 @@ class Vehicle:
                 self.old_O = Vehicle.rotation(reference.dpO[position_to_add-int(np.sign(curr_KPA_angle))].tolist(), self.curr_A(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(),self.curr_K(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(), np.sign(curr_KPA_angle)*reference.step)
                 self.old_W = Vehicle.rotation(reference.dpW[position_to_add-int(np.sign(curr_KPA_angle))].tolist(), self.curr_A(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(),self.curr_K(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(), np.sign(curr_KPA_angle)*reference.step)
                 
-                [t] = fsolve(self.solveO, [0.01], xtol = 0.001)
+                [t] = self._safe_fsolve(self.solveO, [0.01], memo_key=f'solveO_W_{curr_KPA_angle:.2f}', xtol=0.001)
                 
                 tempW = Vehicle.rotation(
                     self.old_W.tolist(),
@@ -763,7 +840,7 @@ class Vehicle:
             return reference.dpW[position_to_add]
         self.old_O = Vehicle.rotation(reference.dpO[position_to_add].tolist(), self.curr_A(rounded_value).tolist(),self.curr_K(rounded_value).tolist(), shift)
         self.old_W = Vehicle.rotation(reference.dpW[position_to_add].tolist(), self.curr_A(rounded_value).tolist(),self.curr_K(rounded_value).tolist(), shift)
-        [t] = fsolve(self.solveO, [0.01], xtol = 0.001)
+        [t] = self._safe_fsolve(self.solveO, [0.01], memo_key=f'solveO_W2_{curr_KPA_angle:.2f}', xtol=0.001)
         tempW = Vehicle.rotation(
             self.old_W.tolist(),
             self.fvsa_ic(rounded_value).tolist(),
@@ -819,7 +896,7 @@ class Vehicle:
         self.old_O = Vehicle.rotation(reference.dpO[position_to_add].tolist(), self.curr_A(rounded_value).tolist(),self.curr_K(rounded_value).tolist(), shift)
         self.old_W = Vehicle.rotation(reference.dpO[position_to_add].tolist(), self.curr_A(rounded_value).tolist(),self.curr_K(rounded_value).tolist(), shift)
         
-        [t] = fsolve(self.solveO, [0.01])
+        [t] = self._safe_fsolve(self.solveO, [0.01], memo_key=f'solveO_T_{rounded_value:.2f}')
         tempT = Vehicle.rotation(
             self.old_T.tolist(),
             self.fvsa_ic(rounded_value).tolist(),
@@ -835,8 +912,26 @@ class Vehicle:
 
         return tempT # np.array([tempO[0], tempT[1], tempT[2]])
     def delta_z(self, curr_KPA_angle):
+        """
+        Calculates vertical wheel travel (delta_z) based on KPA angle.
+        
+        Args:
+            curr_KPA_angle (float): Current Kingpin Axis angle in degrees
+            
+        Returns:
+            float: Vertical displacement. Returns 0 if vehicle is lifted (not on ground).
+        
+        Notes:
+            - If self.on_ground is False (lifted vehicle): always returns 0 (no ground feedback)
+            - If self.on_ground is True (on road): computes actual wheel travel
+        """
         reference = self.reference()
-        return 0 
+        
+        # User-configurable: return 0 if vehicle is lifted (not on ground)
+        if not self.on_ground:
+            return 0
+            
+        # Vehicle is on ground - compute actual wheel travel
         if curr_KPA_angle == 0:
             return 0
         position_to_add = reference.zeropos+int(np.round(curr_KPA_angle,reference.maxdecimal)*reference.conversionstep)
@@ -967,7 +1062,7 @@ class Vehicle:
                 
                 self.old_O = Vehicle.rotation(reference.dpO[position_to_add-int(np.sign(curr_KPA_angle))].tolist(), self.curr_A(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(),self.curr_K(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(), np.sign(curr_KPA_angle)*reference.step)
                 self.old_W = Vehicle.rotation(reference.dpW[position_to_add-int(np.sign(curr_KPA_angle))].tolist(), self.curr_A(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(),self.curr_K(curr_KPA_angle-reference.step*np.sign(curr_KPA_angle)).tolist(), np.sign(curr_KPA_angle)*reference.step)
-                [t] = fsolve(self.solveO, [0.01], xtol = 0.001)
+                [t] = self._safe_fsolve(self.solveO, [0.01], memo_key=f'solveO_O_{curr_KPA_angle:.2f}', xtol=0.001)
                 reference.dpO[position_to_add] = Vehicle.rotation(
                     self.old_O.tolist(),
                     self.fvsa_ic(curr_KPA_angle - np.sign(curr_KPA_angle) * reference.step).tolist(),
@@ -977,7 +1072,7 @@ class Vehicle:
             return reference.dpO[position_to_add]
         self.old_O = Vehicle.rotation(reference.dpO[position_to_add].tolist(), self.curr_A(rounded_value).tolist(),self.curr_K(rounded_value).tolist(), shift)
         self.old_W = Vehicle.rotation(reference.dpW[position_to_add].tolist(), self.curr_A(rounded_value).tolist(),self.curr_K(rounded_value).tolist(), shift)
-        [t] = fsolve(self.solveO, [0.01], xtol = 0.001)
+        [t] = self._safe_fsolve(self.solveO, [0.01], memo_key=f'solveO_O2_{rounded_value:.2f}', xtol=0.001)
         tempO = Vehicle.rotation(
             self.old_O.tolist(),
             self.fvsa_ic(rounded_value).tolist(),

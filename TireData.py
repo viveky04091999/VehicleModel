@@ -2,9 +2,11 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
+import os
 
-# Load data from Excel
-data = pd.read_excel('tiretrainingdata.xlsx')
+# Load data from Excel - using path relative to this script
+script_dir = os.path.dirname(os.path.abspath(__file__))
+data = pd.read_excel(os.path.join(script_dir, 'tiretrainingdata.xlsx'))
 alphaprime = data['alphaprime'].values
 CFprime = data['CFprime'].values
 SATprime = data['SATprime'].values

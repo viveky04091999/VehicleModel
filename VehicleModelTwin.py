@@ -4,11 +4,9 @@ from scipy.optimize import fsolve
 from scipy.integrate import solve_ivp
 from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 from scipy import integrate
 from scipy.interpolate import interp1d
-from scipy.misc import derivative
 
 # Class Vehicle with all the functions
 class Vehicle:
@@ -57,6 +55,7 @@ class Vehicle:
              linkage_effort: float = 1.36, # Nm
              I_w: float = 0.34,
              I_ss: float = 0.03,
+             on_ground: bool = False,  # False = lifted (no ground feedback), True = on road
              tiredata: np.array =  np.array([0.5094636099593582, 0.1120749440478134, 17.8337673155644, 0.4054933824758519, 0.25184969239087557, 5.904032519832173, 0.5968391994177625, 0.309857379732586 ]),
              CF_Loads: np.array = np.array([0, 150, 200, 250, 500]),
              CF_Stiffnessrad: np.array = np.array([0, 20234.57749,	23031.75745, 24629.16378, 24629.16378 + 250*(24629.16378-23031.75745)/50]),
@@ -78,6 +77,7 @@ class Vehicle:
         self.assumed_rack_stroke = assumed_rack_stroke
         self.pinion = pinion
         self.speed = speed*5/18 #m/s
+        self.on_ground = on_ground  # Store whether vehicle is on ground or lifted (unused in Twin model)
         self.static = Vehicle.create_object(r_A, r_B, r_C, r_O, r_K, r_lowermount, r_uppermount, r_newtierodobj, r_newtierodibj, slr, initial_camber, toe_in, 
                                           CG_height, wheel_rate_f, wheel_rate_r, tire_stiffness_f, tire_stiffness_r,
                                             tirep, r_La, r_Lb, r_strut, r_Ua, r_Ub, tiredata, speed)
