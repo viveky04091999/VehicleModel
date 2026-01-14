@@ -4,17 +4,17 @@ from Instances.Quad.base import Golf, MRF13570R1269S
 currveh = Golf()
 currtire = MRF13570R1269S()
 instance = Vehicle(
-    np.array([1071.5, 285.25, 1350.214]), #r_A -  Top of the Kingpin
-    np.array([936.25, 410, 960.2469]), # Tierod Outer Ball Joint
-    np.array([954.83, 176.07, 991.0]), # Tierod Inner Ball Joint
-    np.array([1000, 490, 887.2469]), # Wheel Center
-    np.array([999.9981, 411.2266, 825.4318]), # Bottom of the Kingpin
-    r_La = np.array([919.9981, 123.229, 875.5855]), # Lower A-Arm Bush Front
-    r_Lb = np.array([1079.9, 123.229, 875.5855]), # Lower A-Arm Bush Rear
-    r_strut= np.array([1021.3, 363.0444, 924.0705]), # Strut Top Mount
-    GVW = 606.16,
-    b = 799.72,
-    CG_height = 304.33,
+    np.array([983.185, 226.27, 1487.214]), #r_A -  Top of the Kingpin
+    np.array([845.5, 309.5, 1100.214]), # Tierod Outer Ball Joint
+    np.array([984.4, 20.6, 1103.56]), # Tierod Inner Ball Joint
+    np.array([898.75, 487.5, 972.02469]), # Wheel Center
+    np.array([898.75, 367.138, 911.35]), # Bottom of the Kingpin
+    r_La = np.array([798.75, 104.97, 940.96]), # Lower A-Arm Bush Front
+    r_Lb = np.array([998.75, 104.97, 940.96]), # Lower A-Arm Bush Rear
+    r_strut= np.array([911.3, 320.3444, 1055.75]), # Strut Top Mount
+    GVW = 369,
+    b = 581.59,
+    CG_height = 233.87,
     slr = currveh.slr,
     dlr = currveh.dlr,
     initial_camber = currveh.initial_camber,

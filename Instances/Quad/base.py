@@ -45,15 +45,15 @@ class R129:
 
 class Golf:
     def __init__(self):
-        self.slr = 236
-        self.dlr = 241
+        self.slr = 243
+        self.dlr = 243
         self.initial_camber = 0 # to be checked
         self.toe_in = 0 # to be checked
-        self.twf = 1000-100
-        self.twr = 1000-100
+        self.twf = 980
+        self.twr = 980
         self.wb = 1650
-        self.wr_front = 1.2
-        self.wr_rear = 1.62
+        self.wr_front = 1.18
+        self.wr_rear = 2.17
         self.tire_stiffness_front = 220
         self.tire_stiffness_rear = 220
         self.pinion = 5.91
