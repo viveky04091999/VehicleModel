@@ -56,7 +56,9 @@ class Vehicle:
              tiredata: np.array =  np.array([0.5094636099593582, 0.1120749440478134, 17.8337673155644, 0.4054933824758519, 0.25184969239087557, 5.904032519832173, 0.5968391994177625, 0.309857379732586 ]),
              CF_Loads: np.array = np.array([0, 150, 200, 250, 500]),
              CF_Stiffnessrad: np.array = np.array([0, 20234.57749,	23031.75745, 24629.16378, 24629.16378 + 250*(24629.16378-23031.75745)/50]),
-             CF_pneumatictrail: np.array = np.array([0, 0.011909253,	0.018484467, 0.023331694, 0.023331694 + 250*(0.023331694-0.018484467)/50])): # Continental R13
+             CF_pneumatictrail: np.array = np.array([0, 0.011909253,	0.018484467, 0.023331694, 0.023331694 + 250*(0.023331694-0.018484467)/50]),
+             susp_type: str = "Twin_Lead"  
+             ): # Continental R13
 
         # Create static object
         self.mu = mu
@@ -75,7 +77,8 @@ class Vehicle:
         self.assumed_rack_stroke = assumed_rack_stroke
         self.pinion = pinion
         self.speed = speed*5/18 #m/s
-        self.on_ground = on_ground  # Store whether vehicle is on ground or lifted
+        self.on_ground = on_ground 
+        self.susp_type = susp_type # Store whether vehicle is Twin_Lead or MacPherson for later use in calculations
         self.static = Vehicle.create_object(r_A, r_B, r_C, r_O, r_K, slr, initial_camber, toe_in, 
                                           CG_height, wheel_rate_f, wheel_rate_r, tire_stiffness_f, tire_stiffness_r,
                                             tirep, r_La, r_Lb, r_strut, r_Ua, r_Ub, tiredata, speed)
@@ -311,30 +314,54 @@ class Vehicle:
         """
         reference = self.reference()
         if(reference.r_strut[0] == 0): # No strut present
-            la = values[0]
-            mu = values[1]
-            current_A = self.curr_A(self.curr_KPA_angle_for_fvsa)
-            current_K = self.curr_K(self.curr_KPA_angle_for_fvsa)
-            if reference.r_strut[0] == 0:
+            if(self.susp_type == "Twin_Lead"):
+                la = values[0]
+                mu = values[1]
+                current_A = self.curr_A(self.curr_KPA_angle_for_fvsa)
+                current_K = self.curr_K(self.curr_KPA_angle_for_fvsa)
+                if reference.r_strut[0] == 0:
+                    # No strut present
+                    if(np.abs(reference.r_Ua[0] - reference.r_Ub[0])<1 and np.abs(reference.r_Ua[2] - reference.r_Ub[2])<1) :
+                        a1 = reference.r_Ua
+                        a2 = reference.r_Ub
+                        b1 = reference.r_La
+                        b2 = reference.r_Lb
+                        l1 = a1 + la * (a1 - a2)
+                        l2 = b1 + mu * (b1 - b2)
+                    else:
+                        a1 = current_A
+                        a2 = (reference.r_Ua + reference.r_Ub) / 2
+                        b1 = current_K
+                        b2 = (reference.r_La + reference.r_Lb) / 2
+                        l1 = a1 + la * (a1 - a2)
+                        l2 = b1 + mu * (b1 - b2)  
+                l1 = a1 + la*(a1-a2)
+                l2 = b1 + mu*(b1-b2)
+                eq1 = (l2-l1)[1]
+                eq2 = (l2-l1)[2]
+            else:
+                la = values[0]
+                mu = values[1]
                 # No strut present
+                current_A = self.curr_A(self.curr_KPA_angle_for_svsa)
+                current_K = self.curr_K(self.curr_KPA_angle_for_svsa)
                 if(np.abs(reference.r_Ua[0] - reference.r_Ub[0])<1 and np.abs(reference.r_Ua[2] - reference.r_Ub[2])<1) :
+                    a1 = current_A
+                    a2 = (reference.r_Ua + reference.r_Ub) / 2
+                    b1 = current_K
+                    b2 = (reference.r_La + reference.r_Lb) / 2
+                    l1 = a1 + la * (a1 - a2)
+                    l2 = b1 + mu * (b1 - b2)
+                else:
                     a1 = reference.r_Ua
                     a2 = reference.r_Ub
                     b1 = reference.r_La
                     b2 = reference.r_Lb
                     l1 = a1 + la * (a1 - a2)
                     l2 = b1 + mu * (b1 - b2)
-                else:
-                    a1 = current_A
-                    a2 = (reference.r_Ua + reference.r_Ub) / 2
-                    b1 = current_K
-                    b2 = (reference.r_La + reference.r_Lb) / 2
-                    l1 = a1 + la * (a1 - a2)
-                    l2 = b1 + mu * (b1 - b2)  
-            l1 = a1 + la*(a1-a2)
-            l2 = b1 + mu*(b1-b2)
-            eq1 = (l2-l1)[1]
-            eq2 = (l2-l1)[2]
+                eq1 = (l2 - l1)[0]
+                eq2 = (l2 - l1)[2]
+
         else:
             la = values[0]
             mu = values[1]
@@ -375,20 +402,38 @@ class Vehicle:
             return reference.dpfvsa[position_to_add]
         if reference.r_strut[0] == 0:
             # No strut present
-            
-            current_A = self.curr_A(curr_KPA_angle)
-            current_K = self.curr_K(curr_KPA_angle)
-            if(np.abs(reference.r_Ua[0] - reference.r_Ub[0])<1 and np.abs(reference.r_Ua[2] - reference.r_Ub[2])<1) :
-                reference.dpfvsa[position_to_add] = self.svsa_ic(curr_KPA_angle) + np.array([0,1,0])
-                return reference.dpfvsa[position_to_add]
+            if(self.susp_type == "Twin_Lead"):
+                current_A = self.curr_A(curr_KPA_angle)
+                current_K = self.curr_K(curr_KPA_angle)
+                if(np.abs(reference.r_Ua[0] - reference.r_Ub[0])<1 and np.abs(reference.r_Ua[2] - reference.r_Ub[2])<1) :
+                    reference.dpfvsa[position_to_add] = self.svsa_ic(curr_KPA_angle) + np.array([0,1,0])
+                    return reference.dpfvsa[position_to_add]
+                else:
+                    la, mu = fsolve(self.fvsa_equations, [0.01, 0.01])
+                    a1 = current_A
+                    a2 = (reference.r_Ua + reference.r_Ub) / 2
+                    b1 = current_K
+                    b2 = (reference.r_La + reference.r_Lb) / 2
+                    l1 = a1 + la * (a1 - a2)
+                    l2 = b1 + mu * (b1 - b2)   
             else:
-                la, mu = fsolve(self.fvsa_equations, [0.01, 0.01])
-                a1 = current_A
-                a2 = (reference.r_Ua + reference.r_Ub) / 2
-                b1 = current_K
-                b2 = (reference.r_La + reference.r_Lb) / 2
-                l1 = a1 + la * (a1 - a2)
-                l2 = b1 + mu * (b1 - b2)   
+                [la, mu] = fsolve(self.svsa_equations, [0.01, 0.01])
+                current_A = self.curr_A(self.curr_KPA_angle_for_svsa)
+                current_K = self.curr_K(curr_KPA_angle)
+                if(np.abs(reference.r_Ua[0] - reference.r_Ub[0])<1 and np.abs(reference.r_Ua[2] - reference.r_Ub[2])<1) :
+                    a1 = current_A
+                    a2 = (reference.r_Ua + reference.r_Ub) / 2
+                    b1 = current_K
+                    b2 = (reference.r_La + reference.r_Lb) / 2
+                    l1 = a1 + la * (a1 - a2)
+                    l2 = b1 + mu * (b1 - b2)
+                else:
+                    a1 = reference.r_Ua
+                    a2 = reference.r_Ub
+                    b1 = reference.r_La
+                    b2 = reference.r_Lb
+                    l1 = a1 + la * (a1 - a2)
+                    l2 = b1 + mu * (b1 - b2)
         else:
             # Strut present
             la, mu = fsolve(self.fvsa_equations, [0.01, 0.01])
@@ -424,27 +469,53 @@ class Vehicle:
         """
         reference = self.reference()
         if reference.r_strut[0] == 0:
-            la = values[0]
-            mu = values[1]
-            # No strut present
-            current_A = self.curr_A(self.curr_KPA_angle_for_svsa)
-            current_K = self.curr_K(self.curr_KPA_angle_for_svsa)
-            if(np.abs(reference.r_Ua[0] - reference.r_Ub[0])<1 and np.abs(reference.r_Ua[2] - reference.r_Ub[2])<1) :
-                a1 = current_A
-                a2 = (reference.r_Ua + reference.r_Ub) / 2
-                b1 = current_K
-                b2 = (reference.r_La + reference.r_Lb) / 2
-                l1 = a1 + la * (a1 - a2)
-                l2 = b1 + mu * (b1 - b2)
+            if(self.susp_type == "Twin_Lead"):
+                la = values[0]
+                mu = values[1]
+                # No strut present
+                current_A = self.curr_A(self.curr_KPA_angle_for_svsa)
+                current_K = self.curr_K(self.curr_KPA_angle_for_svsa)
+                if(np.abs(reference.r_Ua[0] - reference.r_Ub[0])<1 and np.abs(reference.r_Ua[2] - reference.r_Ub[2])<1) :
+                    a1 = current_A
+                    a2 = (reference.r_Ua + reference.r_Ub) / 2
+                    b1 = current_K
+                    b2 = (reference.r_La + reference.r_Lb) / 2
+                    l1 = a1 + la * (a1 - a2)
+                    l2 = b1 + mu * (b1 - b2)
+                else:
+                    a1 = reference.r_Ua
+                    a2 = reference.r_Ub
+                    b1 = reference.r_La
+                    b2 = reference.r_Lb
+                    l1 = a1 + la * (a1 - a2)
+                    l2 = b1 + mu * (b1 - b2)
+                eq1 = (l2 - l1)[0]
+                eq2 = (l2 - l1)[2]
             else:
-                a1 = reference.r_Ua
-                a2 = reference.r_Ub
-                b1 = reference.r_La
-                b2 = reference.r_Lb
-                l1 = a1 + la * (a1 - a2)
-                l2 = b1 + mu * (b1 - b2)
-            eq1 = (l2 - l1)[0]
-            eq2 = (l2 - l1)[2]
+                la = values[0]
+                mu = values[1]
+                current_A = self.curr_A(self.curr_KPA_angle_for_fvsa)
+                current_K = self.curr_K(self.curr_KPA_angle_for_fvsa)
+                if reference.r_strut[0] == 0:
+                    # No strut present
+                    if(np.abs(reference.r_Ua[0] - reference.r_Ub[0])<1 and np.abs(reference.r_Ua[2] - reference.r_Ub[2])<1) :
+                        a1 = reference.r_Ua
+                        a2 = reference.r_Ub
+                        b1 = reference.r_La
+                        b2 = reference.r_Lb
+                        l1 = a1 + la * (a1 - a2)
+                        l2 = b1 + mu * (b1 - b2)
+                    else:
+                        a1 = current_A
+                        a2 = (reference.r_Ua + reference.r_Ub) / 2
+                        b1 = current_K
+                        b2 = (reference.r_La + reference.r_Lb) / 2
+                        l1 = a1 + la * (a1 - a2)
+                        l2 = b1 + mu * (b1 - b2)  
+                l1 = a1 + la*(a1-a2)
+                l2 = b1 + mu*(b1-b2)
+                eq1 = (l2-l1)[1]
+                eq2 = (l2-l1)[2]
         else:
             # Strut present
             la = values[0]
@@ -486,24 +557,39 @@ class Vehicle:
         if(reference.dpsvsa[position_to_add][0]>reference.dpsvsa[reference.zeropos][0]/10):
             return reference.dpsvsa[position_to_add]
         if reference.r_strut[0] == 0:
-            # No strut present            
-            [la, mu] = fsolve(self.svsa_equations, [0.01, 0.01])
-            current_A = self.curr_A(self.curr_KPA_angle_for_svsa)
-            current_K = self.curr_K(curr_KPA_angle)
-            if(np.abs(reference.r_Ua[0] - reference.r_Ub[0])<1 and np.abs(reference.r_Ua[2] - reference.r_Ub[2])<1) :
-                a1 = current_A
-                a2 = (reference.r_Ua + reference.r_Ub) / 2
-                b1 = current_K
-                b2 = (reference.r_La + reference.r_Lb) / 2
-                l1 = a1 + la * (a1 - a2)
-                l2 = b1 + mu * (b1 - b2)
+            # No strut present  
+            if(self.susp_type == "Twin_Lead"):          
+                [la, mu] = fsolve(self.svsa_equations, [0.01, 0.01])
+                current_A = self.curr_A(self.curr_KPA_angle_for_svsa)
+                current_K = self.curr_K(curr_KPA_angle)
+                if(np.abs(reference.r_Ua[0] - reference.r_Ub[0])<1 and np.abs(reference.r_Ua[2] - reference.r_Ub[2])<1) :
+                    a1 = current_A
+                    a2 = (reference.r_Ua + reference.r_Ub) / 2
+                    b1 = current_K
+                    b2 = (reference.r_La + reference.r_Lb) / 2
+                    l1 = a1 + la * (a1 - a2)
+                    l2 = b1 + mu * (b1 - b2)
+                else:
+                    a1 = reference.r_Ua
+                    a2 = reference.r_Ub
+                    b1 = reference.r_La
+                    b2 = reference.r_Lb
+                    l1 = a1 + la * (a1 - a2)
+                    l2 = b1 + mu * (b1 - b2)
             else:
-                a1 = reference.r_Ua
-                a2 = reference.r_Ub
-                b1 = reference.r_La
-                b2 = reference.r_Lb
-                l1 = a1 + la * (a1 - a2)
-                l2 = b1 + mu * (b1 - b2)
+                current_A = self.curr_A(curr_KPA_angle)
+                current_K = self.curr_K(curr_KPA_angle)
+                if(np.abs(reference.r_Ua[0] - reference.r_Ub[0])<1 and np.abs(reference.r_Ua[2] - reference.r_Ub[2])<1) :
+                    reference.dpfvsa[position_to_add] = self.svsa_ic(curr_KPA_angle) + np.array([0,1,0])
+                    return reference.dpfvsa[position_to_add]
+                else:
+                    la, mu = fsolve(self.svsa_equations, [0.01, 0.01])
+                    a1 = current_A
+                    a2 = (reference.r_Ua + reference.r_Ub) / 2
+                    b1 = current_K
+                    b2 = (reference.r_La + reference.r_Lb) / 2
+                    l1 = a1 + la * (a1 - a2)
+                    l2 = b1 + mu * (b1 - b2)   
         else:
             # Strut present
             [la, mu] = fsolve(self.svsa_equations, [0.01, 0.01])
